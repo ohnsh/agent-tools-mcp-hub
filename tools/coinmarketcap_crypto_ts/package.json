@@ -1,0 +1,21 @@
+{
+  "name": "coinmarketcap-crypto-ts",
+  "version": "1.0.0",
+  "description": "goal: create a TypeScript tool to fetch top cryptocurrency listings ranked by market cap, 24h trading volume, and price change percentages.",
+  "license": "MIT",
+  "author": "Jonathan Sherrell",
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "start": "tsx src/index.ts",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "fmt": "oxfmt"
+  },
+  "devDependencies": {
+    "@types/node": "^26.4.1",
+    "oxfmt": "^0.66.0",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "name": "coinmarketcap-crypto-ts",
+  "display_name": "CoinMarketCap Top Crypto & Market Cap Explorer (TypeScript)",
+  "description": "Fetches top cryptocurrency listings from CoinMarketCap. If an API key is supplied in the environment, it will be used; otherwise, the public endpoint will be used (the API is the same). Currency conversion is configurable, and results can be sorted by market cap (default), price, 24-hour price change, and 24-hour trading volume.",
+  "category": "Finance",
+  "language": "typescript",
+  "mcp_compatible": true,
+  "author": { "name": "John Sherrell", "github": "ohnsh" },
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "limit": {
+        "type": "number",
+        "description": "The number of results to fetch from CoinMarketCap."
+      },
+      "currency": {
+        "type": "string",
+        "description": "The currency used in the results."
+      },
+      "rankBy": {
+        "type": "enum", // see SortKey type
+        "description": "The number of results to fetch from CoinMarketCap."
+      }
+    },
+    "required": []
+  },
+  "env_vars": ["CMC_API_KEY"]
+}
