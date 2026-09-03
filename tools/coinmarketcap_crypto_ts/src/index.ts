@@ -1,119 +1,250 @@
 import fs from 'node:fs'
-import type { APISuccess, Data, Datum, SortKey } from './types.ts'
+import type {
+  Asset as ApiAsset,
+  Quote,
+  ListingSuccess,
+  FiatMapSuccess,
+  SortKey,
+  APIError,
+  Status as APIStatus,
+} from './types.ts'
 
+// if invoked with `npm run start`, the current directory will be the project root.
 if (fs.existsSync('.env')) {
   process.loadEnvFile('.env')
 }
 
 const CMC_API_KEY = process.env.CMC_API_KEY
-const BASE_URL = CMC_API_KEY
+
+// ref: https://coinmarketcap.com/api/documentation/pro-api-reference/keyless-public-api
+const DEFAULT_BASE_URL = CMC_API_KEY
   ? 'https://pro-api.coinmarketcap.com'
   : 'https://pro-api.coinmarketcap.com/public-api'
-const HEADERS: Record<string, string> = {
-  Accept: 'application/json',
-  'Accept-Encoding': 'deflate, gzip',
-}
-if (CMC_API_KEY) {
-  Object.assign(HEADERS, { 'X-CMC_PRO_API_KEY': CMC_API_KEY })
-}
 
-async function _fetch(path: string) {
-  const res = await fetch(`${BASE_URL}${path}`, { headers: HEADERS })
-  const json = await res.json()
+// consistent with other tools in agent-tools-mcp-hub
+const USER_AGENT =
+  'AgentToolsHub/1.0 (https://github.com/tarunjandra/agent-tools-mcp-hub)'
 
-  if (res.status === 429) {
-    /* exceeding rate limit; try backing off */
-  }
-
-  if (!res.ok) {
-    throw new Error(JSON.stringify(json))
-  }
-
-  return json
+// flattened, simplified version of API type
+interface Asset extends Pick<ApiAsset, 'name' | 'slug' | 'symbol'> {
+  quote: Quote
 }
 
 // without an API key, querying more than one currency returns an error:
 // 'Your plan is limited to 1 convert options'
-export interface ToolOpts {
+interface ListingOpts {
   limit?: number // default 10, max 100
   currency?: string // 'USD,EUR,BTC,...'
   rank?: SortKey
 }
 
-// top {limit} cryptocurrencies by {sort} (default market_cap)
-async function getListing(opts: ToolOpts = {}): Promise<Data[]> {
-  const { limit = 10, currency, rank } = opts
-  const params = new URLSearchParams({
-    limit: limit.toString(),
-  })
-  if (currency) {
-    params.set('convert', currency)
+interface CmcError {
+  name: 'CmcError'
+  message: string
+  details: Record<string, any>
+}
+
+const isCmcError = (err: unknown): err is CmcError =>
+  !!err && typeof err === 'object' && 'name' in err && err.name === 'CmcError'
+
+function makeApiClient(baseUrl: string) {
+  type HeadersInit = NonNullable<ConstructorParameters<typeof Headers>[0]>
+
+  // ref: https://coinmarketcap.com/api/documentation/guides/standards-and-conventions
+  const buildHeaders = (init?: HeadersInit) => {
+    const headers = new Headers(init)
+    headers.set('Accept', 'application/json')
+    headers.set('Accept-Encoding', 'deflate, gzip')
+    headers.set('User-Agent', USER_AGENT)
+    if (CMC_API_KEY) {
+      headers.set('X-CMC_PRO_API_KEY', CMC_API_KEY)
+    }
+
+    return headers
   }
 
-  const result = (await _fetch(
-    `/v3/cryptocurrency/listings/latest?${params}`,
-  )) as APISuccess
+  async function cmcFetch<T>(url: string | URL, init?: RequestInit): Promise<T> {
+    const headers = buildHeaders(init?.headers)
+    const res = await fetch(url, { headers })
 
-  if (rank) {
-    result.data.sort((a, b) => {
-      switch (rank) {
-        case 'name':
-        case 'symbol':
-          return a[rank].localeCompare(b[rank])
-        default:
-          // descending sort
-          return (b.quote[0]?.[rank] ?? 0) - (a.quote[0]?.[rank] ?? 0)
+    if (res.status === 429) {
+      // exceeding rate limit; could implement retry with back-off
+    }
+
+    if (!res.ok) {
+      const apiError = (await res.json()) as APIError
+      const error: CmcError = {
+        name: 'CmcError',
+        message: apiError.status.error_message,
+        details: {
+          httpStatus: res.status,
+          httpStatusText: res.statusText,
+          ...apiError.status,
+        },
       }
-    })
+      throw error
+    }
+
+    return res.json() as Promise<T>
   }
 
-  return result.data.map(cleanData)
-}
-
-async function getCurrencies() {
-  await _fetch('/v1/fiat/map')
-}
-
-const cleanData = (rawData: Datum): Data => {
-  const { name, slug, symbol, quote: [quote] = [] } = rawData
-  if (!quote) {
-    throw new Error()
+  const cleanData = (rawData: ApiAsset): Asset => {
+    const [quote] = rawData.quote
+    if (!quote) {
+      throw new Error('Asset returned by CoinMarketCap API did not contain quote data.')
+    }
+    return {
+      name: rawData.name,
+      slug: rawData.slug,
+      symbol: rawData.symbol,
+      quote,
+    }
   }
+
   return {
-    name,
-    slug,
-    symbol,
-    quote,
+    // top {limit} cryptocurrencies ranked by {rank} (default market_cap)
+    async cmcGetAssets(opts: ListingOpts = {}) {
+      const { limit = 10, currency, rank } = opts
+      const params = new URLSearchParams({
+        limit: limit.toString(),
+      })
+      if (currency) {
+        params.set('convert', currency)
+      }
+
+      return cmcFetch<ListingSuccess>(
+        `${baseUrl}/v3/cryptocurrency/listings/latest?${params}`,
+      ).then((r) => {
+        const apiStatus = r.status
+        const data = r.data.map(cleanData)
+
+        type SortFn = (a: Asset, b: Asset) => number
+        let sortFn: SortFn | undefined
+
+        if (rank === 'name' || rank === 'symbol')
+          sortFn = (a, b) => a[rank].localeCompare(b[rank])
+        else if (rank) {
+          sortFn = (a, b) => b.quote[rank] - a.quote[rank]
+        }
+        return {
+          success: true,
+          data: sortFn ? data.sort(sortFn) : data,
+          apiStatus,
+        }
+      })
+    },
+
+    async cmcGetFiatCurrencies() {
+      const res = await cmcFetch<FiatMapSuccess>(`${baseUrl}/v1/fiat/map?limit=30`)
+      const apiStatus = res.status
+      const data = res.data.map(({ name, sign, symbol }) => ({ name, sign, symbol }))
+
+      return {
+        success: true,
+        data,
+        apiStatus,
+      }
+    },
   }
 }
 
-export async function runTool(opts?: ToolOpts) {
-  if (CMC_API_KEY) {
-    console.log(
-      'CoinMarketCap API key extracted from environment. API calls will be authenticated.',
-    )
-  } else {
-    console.log(
-      'No CoinMarketCap API key found in environment. The keyless API will be used.',
-    )
-  }
-  const listing = await getListing(opts)
+const { cmcGetAssets, cmcGetFiatCurrencies } = makeApiClient(
+  process.env.CMC_BASE_URL || DEFAULT_BASE_URL,
+)
 
-  return listing
+const toolMap = {
+  rankAssets: cmcGetAssets,
+  listCurrencies: cmcGetFiatCurrencies,
+} as const
+
+export type ToolAction = keyof typeof toolMap
+type ToolData<T extends ToolAction> = Awaited<ReturnType<(typeof toolMap)[T]>>['data']
+
+type SuccessResult<T> = {
+  success: true
+  data: T
+  apiStatus: APIStatus
+  log?: string[]
+}
+type ErrorResult = {
+  success: false
+  error: string | { name: string; message: string; details?: Record<string, any> }
+  log?: string[]
 }
 
-const formatData = (data: Data) => {
+export async function runTool<T extends ToolAction>(
+  action: T,
+  opts?: ListingOpts,
+): Promise<SuccessResult<ToolData<T>> | ErrorResult> {
+  const log = []
+  log.push(
+    CMC_API_KEY
+      ? 'CoinMarketCap API key extracted from environment. API calls will be authenticated.'
+      : 'No CoinMarketCap API key found in environment. The keyless API will be used.',
+  )
+
+  try {
+    if (action === 'rankAssets' || action === 'listCurrencies') {
+      const result = await toolMap[action](opts)
+      return { ...result, log } as SuccessResult<ToolData<T>>
+    }
+
+    return {
+      success: false,
+      error: `Unknown action: ${action}. Try 'rankAssets' or 'listCurrencies'.`,
+      log,
+    }
+  } catch (err) {
+    if (!err || typeof err !== 'object') {
+      return {
+        success: false,
+        error: `${err}`,
+        log,
+      }
+    }
+    if (err instanceof Error) {
+      return {
+        success: false,
+        error: { name: err.name, message: err.message },
+        log,
+      }
+    }
+    if (isCmcError(err)) {
+      return {
+        success: false,
+        error: { ...err },
+        log,
+      }
+    }
+    // lord knows we tried
+    throw err
+  }
+}
+
+const formatAsset = (data: Asset) => {
   const { name, slug, symbol, quote } = data
 
-  const currencyFmt = new Intl.NumberFormat([], {
-    currency: quote.symbol,
-    style: 'currency',
-    notation: 'compact',
-    maximumSignificantDigits: 4,
-  })
+  const currencyFmt = (() => {
+    const opts: Intl.NumberFormatOptions = {
+      currency: quote.symbol,
+      style: 'currency',
+      notation: 'compact',
+      maximumSignificantDigits: 4,
+    }
+    try {
+      return new Intl.NumberFormat([], opts)
+    } catch {
+      return new Intl.NumberFormat([], {
+        ...opts,
+        currency: 'USD',
+      })
+    }
+  })()
+
   const percentFmt = new Intl.NumberFormat([], {
     style: 'percent',
     maximumSignificantDigits: 4,
+    maximumFractionDigits: 3,
   })
 
   const percentKeys = [
@@ -130,7 +261,7 @@ const formatData = (data: Data) => {
   type CurrencyKey = (typeof currencyKeys)[number]
 
   const percentDict = Object.fromEntries(
-    percentKeys.map((key) => [key, percentFmt.format(data.quote[key])]),
+    percentKeys.map((key) => [key, percentFmt.format(data.quote[key] / 100)]),
   ) as Record<PercentKey, string>
   const currencyDict = Object.fromEntries(
     currencyKeys.map((key) => [key, currencyFmt.format(data.quote[key])]),
@@ -145,6 +276,15 @@ const formatData = (data: Data) => {
   }
 }
 
-await runTool({ currency: 'EUR', rank: 'percent_change_90d' })
-  .then((results) => results.map(formatData))
-  .then(console.log)
+await runTool('listCurrencies').then(console.log)
+
+await runTool('rankAssets', {
+  limit: 2,
+  rank: 'percent_change_90d',
+}).then((results) => {
+  if (results.success) {
+    console.log(results.data.map(formatAsset))
+  } else {
+    console.error(results)
+  }
+})
