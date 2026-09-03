@@ -1,0 +1,39 @@
+{
+  "name": "alpha_vantage_stock_history",
+  "display_name": "Alpha Vantage Stock History & Indicators",
+  "description": "Fetches historical stock prices (daily OHLCV) or technical indicators (SMA, RSI, EMA, MACD) for any US stock symbol via the free Alpha Vantage REST API.",
+  "category": "Finance",
+  "language": "python",
+  "mcp_compatible": true,
+  "author": {
+    "name": "TianHeng Zhuang",
+    "github": "TianHengZhuang"
+  },
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "symbol": {
+        "type": "string",
+        "description": "Stock symbol (e.g. AAPL, TSLA)",
+        "default": "AAPL"
+      },
+      "function": {
+        "type": "string",
+        "description": "API function: TIME_SERIES_DAILY or indicator (SMA, RSI, EMA, MACD)",
+        "default": "TIME_SERIES_DAILY"
+      },
+      "limit": {
+        "type": "integer",
+        "description": "Number of most recent data points to return",
+        "default": 10
+      },
+      "api_key": {
+        "type": "string",
+        "description": "Alpha Vantage API key; falls back to ALPHA_VANTAGE_API_KEY environment variable",
+        "default": ""
+      }
+    },
+    "required": ["symbol"]
+  },
+  "env_vars": ["ALPHA_VANTAGE_API_KEY"]
+}
