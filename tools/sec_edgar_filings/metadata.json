@@ -1,0 +1,34 @@
+{
+  "name": "sec_edgar_filings",
+  "display_name": "SEC EDGAR Filings Search",
+  "description": "Searches SEC EDGAR for public company regulatory filings (10-K, 10-Q, 8-K) by stock ticker or CIK, returning filing dates, report periods, and direct accession URLs. No API key required.",
+  "category": "Finance",
+  "language": "python",
+  "mcp_compatible": true,
+  "author": {
+    "name": "TianHeng Zhuang",
+    "github": "TianHengZhuang"
+  },
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "ticker": {
+        "type": "string",
+        "description": "Stock ticker (e.g. AAPL, MSFT) or 10-digit CIK",
+        "default": "AAPL"
+      },
+      "form_type": {
+        "type": "string",
+        "description": "Filing form type (10-K, 10-Q, 8-K)",
+        "default": "10-K"
+      },
+      "limit": {
+        "type": "integer",
+        "description": "Number of filings to return (1-100)",
+        "default": 5
+      }
+    },
+    "required": ["ticker"]
+  },
+  "env_vars": []
+}
