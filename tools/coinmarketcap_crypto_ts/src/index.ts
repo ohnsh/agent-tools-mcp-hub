@@ -101,9 +101,15 @@ function makeApiClient(baseUrl: string) {
     }
   }
 
+  interface Fiat {
+    name: string
+    sign: string
+    symbol: string
+  }
+
   return {
     // top {limit} cryptocurrencies ranked by {rankBy} (default market_cap)
-    async cmcGetAssets(opts: ListingOpts = {}) {
+    async cmcGetAssets(opts: ListingOpts = {}): Promise<SuccessResult<Asset[]>> {
       const { limit = 10, currency, rankBy } = opts
       const params = new URLSearchParams({
         limit: limit.toString(),
@@ -134,7 +140,7 @@ function makeApiClient(baseUrl: string) {
       })
     },
 
-    async cmcGetFiatCurrencies() {
+    async cmcGetFiatCurrencies(): Promise<SuccessResult<Fiat[]>> {
       const res = await cmcFetch<FiatMapSuccess>(`${baseUrl}/v1/fiat/map?limit=30`)
       const apiStatus = res.status
       const data = res.data.map(({ name, sign, symbol }) => ({ name, sign, symbol }))
@@ -172,8 +178,8 @@ type ErrorResult = {
   log?: string[]
 }
 
-export async function runTool<T extends ToolAction>(
-  action: T,
+export async function runTool<T extends ToolAction = 'rankAssets'>(
+  action: T = 'rankAssets' as T,
   opts?: ListingOpts,
 ): Promise<SuccessResult<ToolData<T>> | ErrorResult> {
   const log = []
@@ -186,7 +192,7 @@ export async function runTool<T extends ToolAction>(
   try {
     if (action === 'rankAssets' || action === 'listCurrencies') {
       const result = await toolMap[action](opts)
-      return { ...result, log } as SuccessResult<ToolData<T>>
+      return { ...result, log }
     }
 
     return {

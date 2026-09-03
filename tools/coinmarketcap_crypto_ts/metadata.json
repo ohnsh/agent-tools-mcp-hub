@@ -31,7 +31,7 @@
             "description": "The currency used in the results. Call the `listCurrencies` action for a list of currency symbols supported by CoinMarketCap."
           },
           "rankBy": {
-            "type": "string", // see SortKey type
+            "type": "string",
             "enum": [
               "market_cap",
               "name",
