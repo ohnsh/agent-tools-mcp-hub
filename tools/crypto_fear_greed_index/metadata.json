@@ -1,0 +1,24 @@
+{
+  "name": "crypto_fear_greed_index",
+  "display_name": "Crypto Fear and Greed Index",
+  "description": "Fetches the daily Crypto Fear and Greed Index (0-100) from the public Alternative.me API, returning current sentiment score, classification label, and multi-day trend history. No API key required.",
+  "category": "Finance",
+  "language": "python",
+  "mcp_compatible": true,
+  "author": {
+    "name": "TianHeng Zhuang",
+    "github": "TianHengZhuang"
+  },
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "days": {
+        "type": "integer",
+        "description": "Number of daily data points to return (1-30, default 7)",
+        "default": 7
+      }
+    },
+    "required": []
+  },
+  "env_vars": []
+}
