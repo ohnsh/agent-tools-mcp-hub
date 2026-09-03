@@ -35,7 +35,7 @@ interface Asset extends Pick<ApiAsset, 'name' | 'slug' | 'symbol'> {
 interface ListingOpts {
   limit?: number // default 10, max 100
   currency?: string // 'USD,EUR,BTC,...'
-  rank?: SortKey
+  rankBy?: SortKey
 }
 
 interface CmcError {
@@ -102,9 +102,9 @@ function makeApiClient(baseUrl: string) {
   }
 
   return {
-    // top {limit} cryptocurrencies ranked by {rank} (default market_cap)
+    // top {limit} cryptocurrencies ranked by {rankBy} (default market_cap)
     async cmcGetAssets(opts: ListingOpts = {}) {
-      const { limit = 10, currency, rank } = opts
+      const { limit = 10, currency, rankBy } = opts
       const params = new URLSearchParams({
         limit: limit.toString(),
       })
@@ -121,10 +121,10 @@ function makeApiClient(baseUrl: string) {
         type SortFn = (a: Asset, b: Asset) => number
         let sortFn: SortFn | undefined
 
-        if (rank === 'name' || rank === 'symbol')
-          sortFn = (a, b) => a[rank].localeCompare(b[rank])
-        else if (rank) {
-          sortFn = (a, b) => b.quote[rank] - a.quote[rank]
+        if (rankBy === 'name' || rankBy === 'symbol')
+          sortFn = (a, b) => a[rankBy].localeCompare(b[rankBy])
+        else if (rankBy) {
+          sortFn = (a, b) => b.quote[rankBy] - a.quote[rankBy]
         }
         return {
           success: true,
@@ -221,7 +221,7 @@ export async function runTool<T extends ToolAction>(
   }
 }
 
-const formatAsset = (data: Asset) => {
+export const formatAsset = (data: Asset) => {
   const { name, slug, symbol, quote } = data
 
   const currencyFmt = (() => {
@@ -279,11 +279,10 @@ const formatAsset = (data: Asset) => {
 await runTool('listCurrencies').then(console.log)
 
 await runTool('rankAssets', {
-  limit: 2,
-  rank: 'percent_change_90d',
+  rankBy: 'volume_24h',
 }).then((results) => {
   if (results.success) {
-    console.log(results.data.map(formatAsset))
+    console.log({ ...results, data: results.data.map(formatAsset) })
   } else {
     console.error(results)
   }
