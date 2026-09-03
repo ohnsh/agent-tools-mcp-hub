@@ -1,0 +1,34 @@
+{
+  "name": "fred_economic_data",
+  "display_name": "FRED Economic Data",
+  "description": "Retrieves key US macroeconomic series (Federal Funds Rate, CPI, GDP, Unemployment Rate, etc.) from the Federal Reserve Economic Data (FRED) API, returning recent observations with series metadata.",
+  "category": "Finance",
+  "language": "python",
+  "mcp_compatible": true,
+  "author": {
+    "name": "TianHeng Zhuang",
+    "github": "TianHengZhuang"
+  },
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "series_id": {
+        "type": "string",
+        "description": "FRED series ID (e.g. FEDFUNDS, CPIAUCSL, GDP, UNRATE)",
+        "default": "FEDFUNDS"
+      },
+      "limit": {
+        "type": "integer",
+        "description": "Number of most recent data points to return",
+        "default": 10
+      },
+      "api_key": {
+        "type": "string",
+        "description": "FRED API key; falls back to FRED_API_KEY environment variable",
+        "default": ""
+      }
+    },
+    "required": ["series_id"]
+  },
+  "env_vars": ["FRED_API_KEY"]
+}
