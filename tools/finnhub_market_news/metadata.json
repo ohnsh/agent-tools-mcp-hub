@@ -1,0 +1,39 @@
+{
+  "name": "finnhub_market_news",
+  "display_name": "Finnhub Market News & Earnings",
+  "description": "Fetches company-specific financial news, general market news (general/forex/crypto), and upcoming earnings announcement dates via the Finnhub Stock API.",
+  "category": "Finance",
+  "language": "python",
+  "mcp_compatible": true,
+  "author": {
+    "name": "TianHeng Zhuang",
+    "github": "TianHengZhuang"
+  },
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "category": {
+        "type": "string",
+        "description": "News category: general, forex, crypto, or earnings (for upcoming earnings calendar)",
+        "default": "general"
+      },
+      "symbol": {
+        "type": "string",
+        "description": "Company symbol (e.g. AAPL). When set, fetches company-specific news",
+        "default": ""
+      },
+      "limit": {
+        "type": "integer",
+        "description": "Number of news items to return",
+        "default": 10
+      },
+      "api_key": {
+        "type": "string",
+        "description": "Finnhub API key; falls back to FINNHUB_API_KEY environment variable",
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "env_vars": ["FINNHUB_API_KEY"]
+}
