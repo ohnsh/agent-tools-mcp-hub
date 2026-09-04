@@ -10,8 +10,6 @@
     "check": "tsc --noEmit",
     "start": "npm run demo",
     "demo": "tsx tool/demo.ts",
-    "dump": "echo \"import { dumpTool } from './index.js'\nawait dumpTool()\n\" | tsx",
-    "test": "node --test --import=tsx",
     "fmt": "oxfmt"
   },
   "devDependencies": {
