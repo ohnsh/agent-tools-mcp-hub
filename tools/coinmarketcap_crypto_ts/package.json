@@ -5,7 +5,8 @@
   "license": "MIT",
   "author": "Jonathan Sherrell",
   "type": "module",
-  "main": "index.ts",
+  "main": "./index.ts",
+  "types": "./index.ts",
   "scripts": {
     "check": "tsc --noEmit",
     "start": "npm run demo",

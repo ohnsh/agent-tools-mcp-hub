@@ -1,9 +1,12 @@
 import fs from 'node:fs'
 import prompts from 'prompts'
-import { makeCoinMarketCapTool, formatAsset } from './tool.js'
+import { makeCoinMarketCapTool, formatAsset, type Asset } from './tool.js'
 
-if (fs.existsSync('.env')) {
-  process.loadEnvFile('.env')
+// use `npm run demo -- --no-env` to disable reading .env (mainly for testing)
+if (process.argv[2] !== '--no-env') {
+  if (fs.existsSync('.env')) {
+    process.loadEnvFile('.env')
+  }
 }
 
 const { runTool } = makeCoinMarketCapTool()
@@ -79,10 +82,12 @@ const displayKeys = [
 const extractKeys = (keys: string[], obj: Record<string, any>) =>
   Object.fromEntries(Object.entries(obj).filter(([key]) => keys.includes(key)))
 
+const reallyFormatAsset = (asset: Asset) => extractKeys(displayKeys, formatAsset(asset))
+
 if (result.success) {
   console.log({
     ...result,
-    data: result.data.map(formatAsset).map(extractKeys.bind(undefined, displayKeys)),
+    data: result.data.map(reallyFormatAsset),
   })
 } else {
   console.error(result)

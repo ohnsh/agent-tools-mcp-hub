@@ -79,7 +79,10 @@ type ErrorResult = {
 
 // Utilities to work with tool return values
 type Wrap<T> = Promise<SuccessResult<T>>
-type Unwrap<T extends Promise<SuccessResult<any>>> = Awaited<T>['data']
+type Unwrap<T extends Wrap<any>> = Awaited<T>['data']
+
+// doesn't work:
+// type Unwrap<T extends Wrap<any>> = T extends Wrap<infer R> ? R : never
 
 // Defines the tool interfaces
 interface ToolMap {

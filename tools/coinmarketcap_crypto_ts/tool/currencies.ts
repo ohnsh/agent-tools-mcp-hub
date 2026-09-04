@@ -1,6 +1,8 @@
 /**
  * From the CoinMarketCap /v1/fiat/map API. That particular call requires a key, so
  * making the data available here.
+ *
+ * Keeping the .ts extension so that TypeScript will automatically type the export.
  */
 export default [
   { name: 'United States Dollar', sign: '$', symbol: 'USD' },
