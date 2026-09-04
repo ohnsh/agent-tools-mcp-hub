@@ -14,12 +14,14 @@ if (fs.existsSync('.env')) {
   process.loadEnvFile('.env')
 }
 
-const CMC_API_KEY = process.env.CMC_API_KEY
-
 // ref: https://coinmarketcap.com/api/documentation/pro-api-reference/keyless-public-api
-const DEFAULT_BASE_URL = CMC_API_KEY
-  ? 'https://pro-api.coinmarketcap.com'
-  : 'https://pro-api.coinmarketcap.com/public-api'
+const defaultBaseUrl = (apiKey?: string) => {
+  const hardCoded = apiKey
+    ? 'https://pro-api.coinmarketcap.com'
+    : 'https://pro-api.coinmarketcap.com/public-api'
+
+  return process.env.CMC_BASE_URL || hardCoded
+}
 
 // consistent with other tools in agent-tools-mcp-hub
 const USER_AGENT =
@@ -47,8 +49,21 @@ interface CmcError {
 const isCmcError = (err: unknown): err is CmcError =>
   !!err && typeof err === 'object' && 'name' in err && err.name === 'CmcError'
 
-function makeApiClient(baseUrl: string) {
+function makeApiClient({
+  apiKey = process.env.CMC_API_KEY,
+  baseUrl = defaultBaseUrl(apiKey),
+}: {
+  apiKey?: string
+  baseUrl?: string
+} = {}) {
   type HeadersInit = NonNullable<ConstructorParameters<typeof Headers>[0]>
+
+  const log = []
+  log.push(
+    apiKey
+      ? 'CoinMarketCap API key extracted from environment. API calls will be authenticated.'
+      : 'No CoinMarketCap API key found in environment. The keyless API will be used.',
+  )
 
   // ref: https://coinmarketcap.com/api/documentation/guides/standards-and-conventions
   const buildHeaders = (init?: HeadersInit) => {
@@ -56,16 +71,37 @@ function makeApiClient(baseUrl: string) {
     headers.set('Accept', 'application/json')
     headers.set('Accept-Encoding', 'deflate, gzip')
     headers.set('User-Agent', USER_AGENT)
-    if (CMC_API_KEY) {
-      headers.set('X-CMC_PRO_API_KEY', CMC_API_KEY)
+    if (apiKey) {
+      headers.set('X-CMC_PRO_API_KEY', apiKey)
     }
 
     return headers
   }
 
-  async function cmcFetch<T>(url: string | URL, init?: RequestInit): Promise<T> {
-    const headers = buildHeaders(init?.headers)
-    const res = await fetch(url, { headers })
+  // use typescript function overloads to allow for a plain-response-returning variant
+  // while keeping other calls strongly typed. This could also work for `runTool` variants
+  // (currently uses a generic to which a parameter is assigned).
+  async function cmcFetch(
+    url: string | URL,
+    init: RequestInit | undefined,
+    raw: true,
+  ): Promise<Response>
+
+  async function cmcFetch<T>(
+    url: string | URL,
+    init?: RequestInit,
+    raw?: boolean,
+  ): Promise<T>
+
+  async function cmcFetch<T>(
+    url: string | URL,
+    init?: RequestInit,
+    raw = false,
+  ): Promise<T | Response> {
+    const res = await fetch(url, { ...init, headers: buildHeaders(init?.headers) })
+    if (raw) {
+      return res
+    }
 
     if (res.status === 429) {
       // exceeding rate limit; could implement retry with back-off
@@ -107,20 +143,22 @@ function makeApiClient(baseUrl: string) {
     symbol: string
   }
 
+  const cmcAssetsUrl = (opts: ListingOpts = {}) => {
+    const { limit = 10, currency } = opts
+    const params = new URLSearchParams({
+      limit: limit.toString(),
+    })
+    if (currency) {
+      params.set('convert', currency)
+    }
+    return `${baseUrl}/v3/cryptocurrency/listings/latest?${params}`
+  }
+
   return {
     // top {limit} cryptocurrencies ranked by {rankBy} (default market_cap)
     async cmcGetAssets(opts: ListingOpts = {}): Promise<SuccessResult<Asset[]>> {
-      const { limit = 10, currency, rankBy } = opts
-      const params = new URLSearchParams({
-        limit: limit.toString(),
-      })
-      if (currency) {
-        params.set('convert', currency)
-      }
-
-      return cmcFetch<ListingSuccess>(
-        `${baseUrl}/v3/cryptocurrency/listings/latest?${params}`,
-      ).then((r) => {
+      const { rankBy } = opts
+      return cmcFetch<ListingSuccess>(cmcAssetsUrl(opts)).then((r) => {
         const apiStatus = r.status
         const data = r.data.map(cleanData)
 
@@ -151,16 +189,57 @@ function makeApiClient(baseUrl: string) {
         apiStatus,
       }
     },
+
+    async cmcDumpAssets(opts: ListingOpts = {}): Promise<SuccessResult<ApiAsset[]>> {
+      const response = await cmcFetch(cmcAssetsUrl(opts), undefined, true)
+
+      const plainResponse: PlainResponse = {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries()),
+        ok: response.ok,
+        redirected: response.redirected,
+        type: response.type,
+        url: response.url,
+      }
+      const json = (await response.json()) as ListingSuccess
+
+      // returning isn't the point here, but TypeScript is a lot happier if we return a
+      // dummy object of the right shape to be a real tool action.
+      return {
+        success: true,
+        plainResponse,
+        data: json.data,
+        apiStatus: json.status,
+      }
+    },
+
+    log,
   }
 }
 
-const { cmcGetAssets, cmcGetFiatCurrencies } = makeApiClient(
-  process.env.CMC_BASE_URL || DEFAULT_BASE_URL,
-)
+const { cmcGetAssets, cmcGetFiatCurrencies, cmcDumpAssets, log } = makeApiClient()
+
+const pureResponseKeys = [
+  'status',
+  'statusText',
+  'ok',
+  'redirected',
+  'type',
+  'url',
+] as const
+
+type PureResponseKeys = (typeof pureResponseKeys)[number]
+type PlainResponse = {
+  [K in PureResponseKeys]: Response[K]
+} & {
+  headers: Record<string, string>
+}
 
 const toolMap = {
   rankAssets: cmcGetAssets,
   listCurrencies: cmcGetFiatCurrencies,
+  dumpAssets: cmcDumpAssets,
 } as const
 
 export type ToolAction = keyof typeof toolMap
@@ -170,6 +249,7 @@ type SuccessResult<T> = {
   success: true
   data: T
   apiStatus: APIStatus
+  plainResponse?: PlainResponse
   log?: string[]
 }
 type ErrorResult = {
@@ -178,36 +258,32 @@ type ErrorResult = {
   log?: string[]
 }
 
-export async function runTool<T extends ToolAction = 'rankAssets'>(
-  action: T = 'rankAssets' as T,
-  opts?: ListingOpts,
-): Promise<SuccessResult<ToolData<T>> | ErrorResult> {
-  const log = []
-  log.push(
-    CMC_API_KEY
-      ? 'CoinMarketCap API key extracted from environment. API calls will be authenticated.'
-      : 'No CoinMarketCap API key found in environment. The keyless API will be used.',
-  )
+export interface ToolParams<T extends ToolAction> extends ListingOpts {
+  action: T
+}
 
+export async function runTool<T extends ToolAction = 'rankAssets'>({
+  action = 'rankAssets' as T,
+  ...opts
+}: ToolParams<T>): Promise<SuccessResult<ToolData<T>> | ErrorResult> {
   try {
-    if (action === 'rankAssets' || action === 'listCurrencies') {
-      const result = await toolMap[action](opts)
-      return { ...result, log }
-    }
+    switch (action) {
+      case 'rankAssets':
+      case 'listCurrencies':
+      case 'dumpAssets': {
+        const result = await toolMap[action](opts)
+        return { ...result, log }
+      }
 
-    return {
-      success: false,
-      error: `Unknown action: ${action}. Try 'rankAssets' or 'listCurrencies'.`,
-      log,
-    }
-  } catch (err) {
-    if (!err || typeof err !== 'object') {
-      return {
-        success: false,
-        error: `${err}`,
-        log,
+      default: {
+        return {
+          success: false,
+          error: `Unknown action: ${action}. Try 'rankAssets' or 'listCurrencies'.`,
+          log,
+        }
       }
     }
+  } catch (err) {
     if (err instanceof Error) {
       return {
         success: false,
@@ -222,8 +298,13 @@ export async function runTool<T extends ToolAction = 'rankAssets'>(
         log,
       }
     }
-    // lord knows we tried
-    throw err
+
+    // fallback for unrecognized errors
+    return {
+      success: false,
+      error: `${err}`,
+      log,
+    }
   }
 }
 
@@ -282,14 +363,38 @@ export const formatAsset = (data: Asset) => {
   }
 }
 
-await runTool('listCurrencies').then(console.log)
+// see `npm run demo`. Alternatively, could guard with `if (import.meta.main)` to only run
+// when the script is executed directly (other tools here use a similar technique with the
+// commonjs `require.main` API).
+export async function demoTool() {
+  await runTool({ action: 'listCurrencies' }).then(console.log)
 
-await runTool('rankAssets', {
-  rankBy: 'volume_24h',
-}).then((results) => {
-  if (results.success) {
-    console.log({ ...results, data: results.data.map(formatAsset) })
-  } else {
-    console.error(results)
+  await runTool({
+    action: 'rankAssets',
+    rankBy: 'percent_change_24h',
+  }).then((results) => {
+    if (results.success) {
+      console.log({ ...results, data: results.data.map(formatAsset) })
+    } else {
+      console.error(results)
+    }
+  })
+}
+
+export async function dumpTool() {
+  const result = await runTool({
+    action: 'dumpAssets',
+    limit: 5,
+  })
+
+  if (result.success) {
+    const description = 'Successful assets fetch'
+    const output = {
+      description,
+      response: result.plainResponse,
+      apiStatus: result.apiStatus,
+      data: result.data,
+    }
+    process.stdout.write(JSON.stringify(output, undefined, 2))
   }
-})
+}

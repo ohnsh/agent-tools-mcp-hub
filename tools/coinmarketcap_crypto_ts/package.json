@@ -5,11 +5,13 @@
   "license": "MIT",
   "author": "Jonathan Sherrell",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "index.ts",
   "scripts": {
     "check": "tsc --noEmit",
-    "start": "tsx src/index.ts",
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "npm run demo",
+    "demo": "echo \"import { demoTool } from './index.js'\nawait demoTool()\n\" | tsx",
+    "dump": "echo \"import { dumpTool } from './index.js'\nawait dumpTool()\n\" | tsx",
+    "test": "node --test --import=tsx",
     "fmt": "oxfmt"
   },
   "devDependencies": {
