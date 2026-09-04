@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { runTool } from './index.js'
+import { makeCoinMarketCapTool } from './tool/tool.js'
+
+const { runTool } = makeCoinMarketCapTool()
 
 const originalFetch = globalThis.fetch
 test.afterEach(() => {
@@ -14,7 +16,7 @@ test('test test', async () => {
         test: 'test',
       }),
     )
-  const result = await runTool(undefined, { limit: 2 })
+  const result = await runTool({ limit: 2 })
   console.log(result)
   assert.equal(2, 1, 'Big time error.')
 })
