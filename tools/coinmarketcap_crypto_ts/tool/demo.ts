@@ -7,28 +7,21 @@ if (fs.existsSync('.env')) {
 }
 
 const { runTool } = makeCoinMarketCapTool()
+// number of assets to fetch for demo
+const LIMIT = 6
 
-const rawCurrencies = await (async () => {
-  if (!process.env.CMC_API_KEY) {
-    console.log(
-      'Importing prefetched currencies since fetching them requires an API key...',
-    )
-    return (await import('./currencies.js')).default
+console.log('Fetching currencies from CoinMarketCap API...')
+
+const currencies = await runTool({ action: 'listCurrencies' }).then((r) => {
+  if (!r.success) {
+    throw r.error
   }
 
-  console.log('Fetching currencies from CoinMarketCap API...')
-  return runTool({ action: 'listCurrencies' }).then((r) => {
-    if (!r.success) {
-      throw r.error
-    }
-    return r.data
-  })
-})()
-
-const currencies = rawCurrencies.slice(0, 20).map(({ name, sign, symbol }) => ({
-  description: `${name} (${sign})`,
-  title: symbol,
-}))
+  return r.data.slice(0, 20).map(({ name, sign, symbol }) => ({
+    description: `${name} (${sign})`,
+    title: symbol,
+  }))
+})
 
 console.log('Done.')
 console.log('Choose a metric for ranking assets, and an output currency.\n')
@@ -67,15 +60,34 @@ if (!response.rankBy || !response.currency) {
 }
 
 const result = await runTool({
-  limit: 3,
+  limit: LIMIT,
   currency: response.currency,
   rankBy: response.rankBy,
 })
 
+const displayKeys = [
+  'name',
+  'symbol',
+  'price',
+  'market_cap',
+  'volume_24h',
+  `${response.rankBy}`.startsWith('percent_change')
+    ? `${response.rankBy}`
+    : 'percent_change_24h',
+]
+
+const extractKeys = (keys: string[], obj: Record<string, any>) =>
+  Object.fromEntries(Object.entries(obj).filter(([key]) => keys.includes(key)))
+
 if (result.success) {
-  console.log({ ...result, data: result.data.map(formatAsset) })
+  console.log({
+    ...result,
+    data: result.data.map(formatAsset).map(extractKeys.bind(undefined, displayKeys)),
+  })
 } else {
   console.error(result)
 }
 
-console.log('\nDemo limited to top 3 assets. Up to 100 can be requested using the API.\n')
+console.log(
+  `\nDemo limited to top ${LIMIT} assets. Up to 100 can be requested using the API.\n`,
+)

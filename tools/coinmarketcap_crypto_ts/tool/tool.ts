@@ -65,14 +65,16 @@ interface Fiat {
 type SuccessResult<T> = {
   success: true
   data: T
-  apiStatus: APIStatus
+  // this should be defined unless we short-circuit the API and return cached data
+  // (see the listCurrencies command in runTool)
+  apiStatus?: APIStatus
   plainResponse?: PlainResponse
-  log?: string[]
+  runningLog?: string[]
 }
 type ErrorResult = {
   success: false
   error: string | { name: string; message: string; details?: Record<string, any> }
-  log?: string[]
+  runningLog?: string[]
 }
 
 // Utilities to work with tool return values
@@ -100,8 +102,8 @@ export function makeCoinMarketCapTool({
   apiKey?: string
   baseUrl?: string
 } = {}) {
-  const log: string[] = []
-  log.push(
+  const runningLog: string[] = []
+  runningLog.push(
     apiKey
       ? 'CoinMarketCap API key extracted from environment. API calls will be authenticated.'
       : 'No CoinMarketCap API key found in environment. The keyless API will be used.',
@@ -122,17 +124,27 @@ export function makeCoinMarketCapTool({
     try {
       switch (action) {
         case 'rankAssets':
-        case 'listCurrencies':
         case 'dumpAssets': {
           const result = await toolMap[action](opts)
-          return { ...result, log }
+          return { ...result, runningLog }
+        }
+        case 'listCurrencies': {
+          if (!apiKey) {
+            const data = (await import('./currencies.js')).default
+            runningLog.push(
+              'Returning cached fiat currency data because the live endpoint requires an API key.',
+            )
+            return { success: true, data, runningLog }
+          }
+          const result = await toolMap[action](opts)
+          return { ...result, runningLog }
         }
 
         default: {
           return {
             success: false,
             error: `Unknown action: ${action}. Try 'rankAssets' or 'listCurrencies'.`,
-            log,
+            runningLog,
           }
         }
       }
@@ -141,14 +153,14 @@ export function makeCoinMarketCapTool({
         return {
           success: false,
           error: { name: err.name, message: err.message },
-          log,
+          runningLog,
         }
       }
       if (isCmcError(err)) {
         return {
           success: false,
           error: { ...err },
-          log,
+          runningLog,
         }
       }
 
@@ -156,7 +168,7 @@ export function makeCoinMarketCapTool({
       return {
         success: false,
         error: `${err}`,
-        log,
+        runningLog,
       }
     }
   }
