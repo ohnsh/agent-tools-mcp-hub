@@ -42,6 +42,7 @@ interface CmcError {
 const isCmcError = (err: unknown): err is CmcError =>
   !!err && typeof err === 'object' && 'name' in err && err.name === 'CmcError'
 
+// convert a Response object to a plain Record<string, any> for logging/testing
 const toPlainResponse = (r: Response) => ({
   status: r.status,
   statusText: r.statusText,
@@ -53,21 +54,14 @@ const toPlainResponse = (r: Response) => ({
 })
 type PlainResponse = ReturnType<typeof toPlainResponse>
 
+// returned by listCurrencies (/v1/fiat/map)
 interface Fiat {
   name: string
   sign: string
   symbol: string
 }
 
-interface ToolMap {
-  rankAssets: (opts?: ListingOpts) => Promise<SuccessResult<Asset[]>>
-  listCurrencies: () => Promise<SuccessResult<Fiat[]>>
-  dumpAssets: (opts?: ListingOpts) => Promise<SuccessResult<ApiAsset[]>>
-}
-
-type ToolAction = keyof ToolMap
-type ToolData<T extends ToolAction> = Awaited<ReturnType<ToolMap[T]>>['data']
-
+// common shape for tool return values
 type SuccessResult<T> = {
   success: true
   data: T
@@ -81,6 +75,20 @@ type ErrorResult = {
   log?: string[]
 }
 
+// Utilities to work with tool return values
+type Wrap<T> = Promise<SuccessResult<T>>
+type Unwrap<T extends Promise<SuccessResult<any>>> = Awaited<T>['data']
+
+// Defines the tool interfaces
+interface ToolMap {
+  rankAssets: (opts?: ListingOpts) => Wrap<Asset[]>
+  listCurrencies: () => Wrap<Fiat[]>
+  dumpAssets: (opts?: ListingOpts) => Wrap<ApiAsset[]>
+}
+
+type ToolAction = keyof ToolMap
+type ToolData<T extends ToolAction> = Unwrap<ReturnType<ToolMap[T]>>
+
 interface ToolParams<T extends ToolAction> extends ListingOpts {
   action?: T
 }
@@ -92,8 +100,6 @@ export function makeCoinMarketCapTool({
   apiKey?: string
   baseUrl?: string
 } = {}) {
-  type HeadersInit = NonNullable<ConstructorParameters<typeof Headers>[0]>
-
   const log: string[] = []
   log.push(
     apiKey
@@ -180,9 +186,11 @@ export function makeCoinMarketCapTool({
       return res
     }
 
-    if (res.status === 429) {
-      // exceeding rate limit; could implement retry with back-off
-    }
+    /**
+     * Exceeding rate limit; could implement retry with back-off
+     *
+     * if (res.status === 429)
+     */
 
     if (!res.ok) {
       const apiError = (await res.json()) as APIError
@@ -195,6 +203,7 @@ export function makeCoinMarketCapTool({
           ...apiError.status,
         },
       }
+      // this layer throws; errors are handled in `runTool`
       throw error
     }
 
@@ -202,7 +211,7 @@ export function makeCoinMarketCapTool({
   }
 
   // ref: https://coinmarketcap.com/api/documentation/guides/standards-and-conventions
-  function buildHeaders(init?: HeadersInit) {
+  function buildHeaders(init?: RequestInit['headers']) {
     const headers = new Headers(init)
     headers.set('Accept', 'application/json')
     headers.set('Accept-Encoding', 'deflate, gzip')
@@ -214,15 +223,16 @@ export function makeCoinMarketCapTool({
     return headers
   }
 
-  function cleanData(rawData: ApiAsset): Asset {
-    const [quote] = rawData.quote
+  function cleanAsset(rawAsset: ApiAsset): Asset {
+    // rawAsset.quote is an array with one item when one currency was requested
+    const [quote] = rawAsset.quote
     if (!quote) {
       throw new Error('Asset returned by CoinMarketCap API did not contain quote data.')
     }
     return {
-      name: rawData.name,
-      slug: rawData.slug,
-      symbol: rawData.symbol,
+      name: rawAsset.name,
+      slug: rawAsset.slug,
+      symbol: rawAsset.symbol,
       quote,
     }
   }
@@ -243,7 +253,7 @@ export function makeCoinMarketCapTool({
     const { rankBy } = opts ?? {}
     return cmcFetch<ListingSuccess>(cmcAssetsUrl(opts)).then((r) => {
       const apiStatus = r.status
-      const data = r.data.map(cleanData)
+      const data = r.data.map(cleanAsset)
 
       type SortFn = (a: Asset, b: Asset) => number
       let sortFn: SortFn | undefined
@@ -273,19 +283,74 @@ export function makeCoinMarketCapTool({
     }
   }
 
+  // returns the Response (converted to a plain object) and the unmodified body
+  // for logging or testing
   async function cmcDumpAssets(opts?: ListingOpts): Promise<SuccessResult<ApiAsset[]>> {
     const response = await cmcFetch(cmcAssetsUrl(opts), undefined, true)
 
     const plainResponse = toPlainResponse(response)
     const json = (await response.json()) as ListingSuccess
 
-    // returning isn't the point here, but TypeScript is a lot happier if we return a
-    // dummy object of the right shape to be a real tool action.
     return {
       success: true,
       plainResponse,
       data: json.data,
       apiStatus: json.status,
     }
+  }
+}
+
+export const formatAsset = (data: Asset) => {
+  const { name, slug, symbol, quote } = data
+
+  const currencyFmt = (() => {
+    const opts: Intl.NumberFormatOptions = {
+      currency: quote.symbol,
+      style: 'currency',
+      notation: 'compact',
+      maximumSignificantDigits: 4,
+    }
+    try {
+      return new Intl.NumberFormat([], opts)
+    } catch {
+      return new Intl.NumberFormat([], {
+        ...opts,
+        currency: 'USD',
+      })
+    }
+  })()
+
+  const percentFmt = new Intl.NumberFormat([], {
+    style: 'percent',
+    maximumSignificantDigits: 4,
+    maximumFractionDigits: 3,
+  })
+
+  const percentKeys = [
+    'percent_change_1h',
+    'percent_change_24h',
+    'percent_change_7d',
+    'percent_change_30d',
+    'percent_change_60d',
+    'percent_change_90d',
+  ] as const
+  const currencyKeys = ['price', 'market_cap', 'volume_24h'] as const
+
+  type PercentKey = (typeof percentKeys)[number]
+  type CurrencyKey = (typeof currencyKeys)[number]
+
+  const percentDict = Object.fromEntries(
+    percentKeys.map((key) => [key, percentFmt.format(data.quote[key] / 100)]),
+  ) as Record<PercentKey, string>
+  const currencyDict = Object.fromEntries(
+    currencyKeys.map((key) => [key, currencyFmt.format(data.quote[key])]),
+  ) as Record<CurrencyKey, string>
+
+  return {
+    name,
+    slug,
+    symbol,
+    ...currencyDict,
+    ...percentDict,
   }
 }

@@ -1,0 +1,81 @@
+import fs from 'node:fs'
+import prompts from 'prompts'
+import { makeCoinMarketCapTool, formatAsset } from './tool.js'
+
+if (fs.existsSync('.env')) {
+  process.loadEnvFile('.env')
+}
+
+const { runTool } = makeCoinMarketCapTool()
+
+const rawCurrencies = await (async () => {
+  if (!process.env.CMC_API_KEY) {
+    console.log(
+      'Importing prefetched currencies since fetching them requires an API key...',
+    )
+    return (await import('./currencies.js')).default
+  }
+
+  console.log('Fetching currencies from CoinMarketCap API...')
+  return runTool({ action: 'listCurrencies' }).then((r) => {
+    if (!r.success) {
+      throw r.error
+    }
+    return r.data
+  })
+})()
+
+const currencies = rawCurrencies.slice(0, 20).map(({ name, sign, symbol }) => ({
+  description: `${name} (${sign})`,
+  title: symbol,
+}))
+
+console.log('Done.')
+console.log('Choose a metric for ranking assets, and an output currency.\n')
+
+const response = await prompts([
+  {
+    type: 'select',
+    name: 'rankBy',
+    message: 'Rank by:',
+    choices: [
+      { title: 'Market Cap', value: 'market_cap' }, // description
+      { title: 'Name', value: 'name' },
+      { title: 'Symbol', value: 'symbol' },
+      { title: 'Price', value: 'price' },
+      { title: 'Volume (24h)', value: 'volume_24h' },
+      { title: 'Pct. Change (1h)', value: 'percent_change_1h' },
+      { title: 'Pct. Change (24h)', value: 'percent_change_24h' },
+      { title: 'Pct. Change (7d)', value: 'percent_change_7d' },
+      { title: 'Pct. Change (30d)', value: 'percent_change_30d' },
+      { title: 'Pct. Change (60d)', value: 'percent_change_60d' },
+      { title: 'Pct. Change (90d)', value: 'percent_change_90d' },
+    ],
+    initial: 0, // Index of the default selection
+  },
+  {
+    type: 'autocomplete',
+    name: 'currency',
+    message: 'Output currency',
+    choices: currencies,
+  },
+])
+
+if (!response.rankBy || !response.currency) {
+  console.log('Demo canceled. Exiting.')
+  process.exit()
+}
+
+const result = await runTool({
+  limit: 3,
+  currency: response.currency,
+  rankBy: response.rankBy,
+})
+
+if (result.success) {
+  console.log({ ...result, data: result.data.map(formatAsset) })
+} else {
+  console.error(result)
+}
+
+console.log('\nDemo limited to top 3 assets. Up to 100 can be requested using the API.\n')
