@@ -1,8 +1,8 @@
-# CoinMarketCap Top Crypto & Market Cap Explorer (TypeScript)
+# CoinMarketCap Top Crypto & Market Cap Explorer
 
-Fetches top cryptocurrency listings from the [CoinMarketCap API](https://coinmarketcap.com/api/documentation/). Output currency is configurable, and results can be sorted by market cap (default), price, price change (1h, 24h, 7d, 30d, 60d, 90d), and 24h trading volume.
+A TypeScript integration that fetches top cryptocurrency listings from the [CoinMarketCap API](https://coinmarketcap.com/api/documentation/), with price data in the user's preferred currency. Results can be ranked by market cap (default), price, price change (1h, 24h, 7d, 30d, 60d, 90d), and 24h trading volume.
 
-An API key is not required, but one can be supplied via the `CMC_API_KEY` environment variable. (You are unlikely to notice a difference when using this tool, other than more aggressive rate-limiting on the public endpoint.)
+No API key is required, but one can be supplied via the `CMC_API_KEY` environment variable. (It's unlikely to make a difference, other than more aggressive rate-limiting on the public endpoint.)
 
 ## Installation and usage
 
@@ -12,7 +12,7 @@ An API key is not required, but one can be supplied via the `CMC_API_KEY` enviro
 cd tools/coinmarketcap_crypto_ts
 npm install
 
-# if you have a CoinMarketCap API key:
+# If you have a CoinMarketCap API key:
 export CMC_API_KEY=KEY
 npm run demo
 ```
@@ -32,49 +32,22 @@ npm install "file:$TOOLS_DIR/coinmarketcap_crypto_ts"
 import { runTool } from 'coinmarketcap-crypto-ts'
 
 const result = await runTool({
-  // limit: 10,
-  // currency: 'USD',
-  // rankBy: 'market_cap' (see SortKey definition)
+  // all defaults:
+  action: 'rankAssets',
+  limit: 10,
+  currency: 'USD',
+  rankBy: 'market_cap', // (see SortKey definition)
 })
 
 console.log(result.data)
 ```
 
+### Usage notes
+
 - If you have a CoinMarketCap API key, set `CMC_API_KEY` in your environment. (This package will attempt to load a `.env` file in the current directory.)
 - This package is not currently distributed with pre-built JavaScript, so please use a TypeScript runtime.
   - `bun myscript.ts`
   - `npx tsx myscript.ts`
-
-## Longer example
-
-```ts
-import { runTool } from 'coinmarketcap-crypto-ts'
-
-const currencyResult = await runTool({ action: 'listCurrencies' })
-if (!currencyResult.success) {
-  throw currencyResult.error
-}
-
-for (const { symbol } of currencyResult.data) {
-  // fiat currency symbols that can be passed to `rankAssets` to control output
-}
-
-const result = await runTool({
-  // limit: 10,
-  // currency: 'USD',
-  // rankBy: 'market_cap' (see SortKey definition)
-})
-if (!result.success) {
-  throw result.error
-}
-
-const { data: assets, apiStatus } = result
-// `assets` is an array of crypto assets
-// `apiStatus` is a status object returned by the CoinMarketCap API.
-for (const asset of assets) {
-  // `asset.quote` contains live trading info in the requested currency
-}
-```
 
 ## Parameters
 
@@ -102,6 +75,37 @@ type SortKey =
   | 'percent_change_30d'
   | 'percent_change_60d'
   | 'percent_change_90d'
+```
+
+## Longer example
+
+```ts
+import { runTool } from 'coinmarketcap-crypto-ts'
+
+const currencyResult = await runTool({ action: 'listCurrencies' })
+if (!currencyResult.success) {
+  throw currencyResult.error
+}
+
+for (const { symbol } of currencyResult.data) {
+  console.log(symbol) // fiat currencies that can be passed to `rankAssets` to control output
+}
+
+const result = await runTool({
+  action: 'rankAssets',
+  rankBy: 'volume_24h',
+})
+if (!result.success) {
+  throw result.error
+}
+
+const { data: assets, apiStatus } = result
+console.log(assets) // an array of crypto assets
+console.log(apiStatus) // returned by the CoinMarketCap API.
+
+for (const asset of assets) {
+  console.log(asset.quote) // live data in the requested currency
+}
 ```
 
 ## Return types
