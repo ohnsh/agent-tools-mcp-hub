@@ -110,9 +110,13 @@ On success:
 - `runTool({ action: 'rankAssets' })` returns `SuccessResult<Asset[]>`
 - `runTool({ action: 'listCurrencies' })` returns `SuccessResult<Fiat[]>`
 
-On error, `runTool` always returns an `ErrorResult` (it does not throw). Details can be inspected via `error.details` on the response. See the [CoinMarketCap docs](https://coinmarketcap.com/api/documentation/guides/errors-and-rate-limits) for information about specific error codes and rate limits.
+On error, `runTool` always returns an `ErrorResult` (it does not throw). For most errors, details can be inspected via `error.details` on the response. See the [CoinMarketCap docs](https://coinmarketcap.com/api/documentation/guides/errors-and-rate-limits) for information about specific error codes and rate limits.
 
 ```ts
+/**
+ * Simplified interfaces. (Complete definitions in tool/tool.ts and tool/api-types.ts)
+ */
+
 type SuccessResult<T> = {
   success: true
   data: T
@@ -123,13 +127,9 @@ type ErrorResult = {
   error: string | { name: string; message: string; details?: Record<string, any> }
 }
 
-// timestamps are ISO UTC (2026-09-02T05:49:00.000Z)
-type Timestamp = string
-
 // from raw CoinMarketCap response.
 // ref: https://coinmarketcap.com/api/documentation/guides/errors-and-rate-limits
 interface APIStatus {
-  timestamp: Timestamp
   error_code: string | number
   error_message: string
   elapsed: number
@@ -143,22 +143,16 @@ interface Fiat {
 }
 
 interface Asset {
-  tags: string[]
-  id: number
   name: string
   symbol: string
   slug: string
-  date_added: Timestamp
-  last_updated: Timestamp
   quote: Quote[]
 }
 
 interface Quote {
-  id: number
   symbol: string
   price: number
   volume_24h: number
-  volume_change_24h: number
   cex_volume_24h: number
   dex_volume_24h: number
   percent_change_1h: number
@@ -171,6 +165,5 @@ interface Quote {
   market_cap_dominance: number
   fully_diluted_market_cap: number
   minted_market_cap: number
-  last_updated: Timestamp
 }
 ```
