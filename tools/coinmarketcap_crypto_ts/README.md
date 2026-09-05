@@ -1,5 +1,9 @@
 # CoinMarketCap Top Crypto & Market Cap Explorer (TypeScript)
 
+Fetches top cryptocurrency listings from the [CoinMarketCap API](https://coinmarketcap.com/api/documentation/). Output currency is configurable, and results can be sorted by market cap (default), price, price change (1h, 24h, 7d, 30d, 60d, 90d), and 24h trading volume.
+
+An API key is not required, but one can be supplied via the `CMC_API_KEY` environment variable. (You are unlikely to notice a difference when using this tool, other than more aggressive rate-limiting on the public endpoint.)
+
 ## Installation and usage
 
 ### Run the demo
@@ -10,7 +14,6 @@ npm install
 
 # if you have a CoinMarketCap API key:
 export CMC_API_KEY=KEY
-
 npm run demo
 ```
 
@@ -18,11 +21,31 @@ npm run demo
 
 ```bash
 # set to the location of this repository's tools directory on your system:
-TOOLS_DIR=agent-tools-mcp-hub/tools
+TOOLS_DIR="agent-tools-mcp-hub/tools"
 npm install "file:$TOOLS_DIR/coinmarketcap_crypto_ts"
 ```
 
-If you have a CoinMarketCap API key, set `CMC_API_KEY` in your environment. This package will attempt to load a `.env` file in the current directory.
+```ts
+// myscript.ts
+// see below for a more complete example with error handling
+
+import { runTool } from 'coinmarketcap-crypto-ts'
+
+const result = await runTool({
+  // limit: 10,
+  // currency: 'USD',
+  // rankBy: 'market_cap' (see SortKey definition)
+})
+
+console.log(result.data)
+```
+
+- If you have a CoinMarketCap API key, set `CMC_API_KEY` in your environment. (This package will attempt to load a `.env` file in the current directory.)
+- This package is not currently distributed with pre-built JavaScript, so please use a TypeScript runtime.
+  - `bun myscript.ts`
+  - `npx tsx myscript.ts`
+
+## Longer example
 
 ```ts
 import { runTool } from 'coinmarketcap-crypto-ts'
@@ -59,10 +82,10 @@ for (const asset of assets) {
 
 | Parameter | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `action`   | `'rankAssets' \| 'listCurrencies'` | `'rankAssets'` | The action to run |
-| `limit`    | `number` | 10  | Number of assets to fetch from CoinMarketCap |
-| `currency` | `string` | USD | Currency in which to display results |
-| `rankBy`   | `SortKey` (see below) | `'market_cap'` | Rank assets by this metric |
+| `action`   | `'rankAssets' \| 'listCurrencies'` | `'rankAssets'` | The action to run. |
+| `limit`    | `number` | 10  | Number of assets to fetch from CoinMarketCap. |
+| `currency` | `string` | USD | Currency in which to display results.<br>(See [example](#longer-example) for code to list supported currency symbols.) |
+| `rankBy`   | `SortKey` (see below) | `'market_cap'` | Rank assets by this metric. |
 
 Valid values for `rankBy`:
 
@@ -87,7 +110,7 @@ On success:
 - `runTool({ action: 'rankAssets' })` returns `SuccessResult<Asset[]>`
 - `runTool({ action: 'listCurrencies' })` returns `SuccessResult<Fiat[]>`
 
-On error, `runTool` always returns an `ErrorResult` (it does not throw).
+On error, `runTool` always returns an `ErrorResult` (it does not throw). Details can be inspected via `error.details` on the response. See the [CoinMarketCap docs](https://coinmarketcap.com/api/documentation/guides/errors-and-rate-limits) for information about specific error codes and rate limits.
 
 ```ts
 type SuccessResult<T> = {
@@ -100,8 +123,18 @@ type ErrorResult = {
   error: string | { name: string; message: string; details?: Record<string, any> }
 }
 
-// Timestamps are ISO UTC (2026-09-02T05:49:00.000Z)
+// timestamps are ISO UTC (2026-09-02T05:49:00.000Z)
 type Timestamp = string
+
+// from raw CoinMarketCap response.
+// ref: https://coinmarketcap.com/api/documentation/guides/errors-and-rate-limits
+interface APIStatus {
+  timestamp: Timestamp
+  error_code: string | number
+  error_message: string
+  elapsed: number
+  credit_count: number
+}
 
 interface Fiat {
   name: string
