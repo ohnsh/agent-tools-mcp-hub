@@ -1,32 +1,5 @@
 # CoinMarketCap Top Crypto & Market Cap Explorer (TypeScript)
 
-
-
-## Parameters
-
-| Parameter | Type | Required | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `action` | `'rankAssets' \| 'listCurrencies'` | No | `'rankAssets'` | The action to run
-| `limit` | `number` | No | 10 | Number of assets to fetch from CoinMarketCap
-| `currency` | `string` | No | USD | Currency in which to display results
-| `rankBy` | `SortKey` (see below) | No | `'market_cap'` | Rank assets by this metric
-
-```ts
-// valid values for `rankBy` option:
-export type SortKey =
-  | 'market_cap'
-  | 'name'
-  | 'symbol'
-  | 'price'
-  | 'volume_24h'
-  | 'percent_change_1h'
-  | 'percent_change_24h'
-  | 'percent_change_7d'
-  | 'percent_change_30d'
-  | 'percent_change_60d'
-  | 'percent_change_90d'
-```
-
 ## Installation and usage
 
 ### Run the demo
@@ -77,5 +50,94 @@ const { data: assets, apiStatus } = result
 // `apiStatus` is a status object returned by the CoinMarketCap API.
 for (const asset of assets) {
   // `asset.quote` contains live trading info in the requested currency
+}
+```
+
+## Parameters
+
+*All parameters are optional:*
+
+| Parameter | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `action`   | `'rankAssets' \| 'listCurrencies'` | `'rankAssets'` | The action to run |
+| `limit`    | `number` | 10  | Number of assets to fetch from CoinMarketCap |
+| `currency` | `string` | USD | Currency in which to display results |
+| `rankBy`   | `SortKey` (see below) | `'market_cap'` | Rank assets by this metric |
+
+Valid values for `rankBy`:
+
+```ts
+type SortKey =
+  | 'market_cap'
+  | 'name'
+  | 'symbol'
+  | 'price'
+  | 'volume_24h'
+  | 'percent_change_1h'
+  | 'percent_change_24h'
+  | 'percent_change_7d'
+  | 'percent_change_30d'
+  | 'percent_change_60d'
+  | 'percent_change_90d'
+```
+
+## Return types
+
+On success:
+- `runTool({ action: 'rankAssets' })` returns `SuccessResult<Asset[]>`
+- `runTool({ action: 'listCurrencies' })` returns `SuccessResult<Fiat[]>`
+
+On error, `runTool` always returns an `ErrorResult` (it does not throw).
+
+```ts
+type SuccessResult<T> = {
+  success: true
+  data: T
+  apiStatus?: APIStatus
+}
+type ErrorResult = {
+  success: false
+  error: string | { name: string; message: string; details?: Record<string, any> }
+}
+
+// Timestamps are ISO UTC (2026-09-02T05:49:00.000Z)
+type Timestamp = string
+
+interface Fiat {
+  name: string
+  sign: string
+  symbol: string
+}
+
+interface Asset {
+  tags: string[]
+  id: number
+  name: string
+  symbol: string
+  slug: string
+  date_added: Timestamp
+  last_updated: Timestamp
+  quote: Quote[]
+}
+
+interface Quote {
+  id: number
+  symbol: string
+  price: number
+  volume_24h: number
+  volume_change_24h: number
+  cex_volume_24h: number
+  dex_volume_24h: number
+  percent_change_1h: number
+  percent_change_24h: number
+  percent_change_7d: number
+  percent_change_30d: number
+  percent_change_60d: number
+  percent_change_90d: number
+  market_cap: number
+  market_cap_dominance: number
+  fully_diluted_market_cap: number
+  minted_market_cap: number
+  last_updated: Timestamp
 }
 ```
