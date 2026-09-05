@@ -1,5 +1,5 @@
 {
-  "name": "coinmarketcap-crypto-ts",
+  "name": "coinmarketcap_crypto_ts",
   "display_name": "CoinMarketCap Top Crypto & Market Cap Explorer (TypeScript)",
   "description": "Fetches top cryptocurrency listings from CoinMarketCap. An API key can be supplied via the CMC_API_KEY environment variable, otherwise the public endpoint will be used (the API is the same). Output currency is configurable, and results can be sorted by market cap (default), price, price change (1h, 24h, 7d, 30d, 60d, 90d), and 24-hour trading volume.",
   "category": "Finance",
